@@ -1,0 +1,31 @@
+[package]
+name = "ken"
+version = "0.1.0"
+description = "A lightweight cross-platform AI search palette."
+authors = ["Carlos Arthur"]
+license = "MIT"
+repository = "https://github.com/carlosarthurr1/Ken"
+edition = "2021"
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+base64 = "0.22"
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tauri = { version = "2", features = ["tray-icon", "macos-private-api", "protocol-asset"] }
+dirs = "6"
+tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
+
+# Local LLM — direct llama.cpp, shares GGUF files with Oat when present.
+# CPU build by default; macOS adds Metal acceleration via the target-specific
+# section below.
+llama-cpp-2 = { version = "0.1", default-features = false, features = [] }
+llama-cpp-sys-2 = { version = "0.1", default-features = false }
+
+[target.'cfg(target_os = "macos")'.dependencies]
+core-foundation = "0.10"
+core-graphics = "0.24"
+llama-cpp-sys-2 = { version = "0.1", default-features = false, features = ["metal"] }
