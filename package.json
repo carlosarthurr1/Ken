@@ -14,6 +14,7 @@
     "build": "tsc && vite build",
     "make:icon": "node scripts/make-icon.mjs",
     "make:tray-icon": "node scripts/make-tray-icon.mjs",
+    "tauri": "tauri",
     "tauri:dev": "tauri dev",
     "tauri:build": "tauri build",
     "tauri:build:app": "tauri build --bundles app"
