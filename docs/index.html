@@ -159,6 +159,80 @@
         color: var(--fg);
       }
 
+      .first-launch {
+        max-width: 560px;
+        margin: 48px auto 0;
+        padding: 22px 24px;
+        text-align: left;
+        border: 1px solid var(--border);
+        border-radius: 14px;
+        background: var(--hover-bg);
+      }
+
+      .first-launch h2 {
+        font-size: 14px;
+        font-weight: 700;
+        letter-spacing: 0.02em;
+        text-transform: uppercase;
+        color: var(--fg);
+        margin: 0 0 12px;
+      }
+
+      .first-launch p {
+        margin: 0 0 12px;
+        color: var(--fg);
+        font-size: 14px;
+        line-height: 1.55;
+      }
+
+      .first-launch p:last-child {
+        margin-bottom: 0;
+      }
+
+      .first-launch .muted {
+        color: var(--muted);
+        font-size: 13px;
+      }
+
+      .first-launch code,
+      .first-launch pre {
+        font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+        font-size: 13px;
+      }
+
+      .first-launch pre {
+        position: relative;
+        margin: 0 0 12px;
+        padding: 12px 44px 12px 14px;
+        background: var(--bg);
+        border: 1px solid var(--border);
+        border-radius: 10px;
+        overflow-x: auto;
+      }
+
+      .first-launch .copy {
+        position: absolute;
+        top: 8px;
+        right: 8px;
+        border: 1px solid var(--border);
+        background: var(--bg);
+        color: var(--muted);
+        font-size: 11px;
+        font-weight: 600;
+        padding: 4px 8px;
+        border-radius: 6px;
+        cursor: pointer;
+      }
+
+      .first-launch .copy:hover {
+        color: var(--fg);
+        background: var(--hover-bg);
+      }
+
+      .first-launch a {
+        color: var(--fg);
+      }
+
       .links {
         display: flex;
         gap: 18px;
@@ -231,6 +305,20 @@
         Or <a href="https://github.com/carlosarthurr1/Ken">view on GitHub</a> · <a href="https://github.com/carlosarthurr1/Ken#readme">build from source</a>
       </p>
 
+      <section class="first-launch" id="first-launch-mac" aria-labelledby="first-launch-heading">
+        <h2 id="first-launch-heading">First launch on macOS</h2>
+        <p>
+          After dragging KEN into Applications, run this once in Terminal:
+        </p>
+        <pre><code id="xattr-cmd">xattr -cr /Applications/KEN.app</code><button class="copy" type="button" data-copy="#xattr-cmd" aria-label="Copy command">Copy</button></pre>
+        <p>
+          Then open KEN from Applications. macOS will ask for <strong>Accessibility</strong> permission so KEN can listen for the double-Option/Alt shortcut — grant it.
+        </p>
+        <p class="muted">
+          KEN is currently distributed unsigned. macOS Gatekeeper flags anything you download as quarantined, and on Sequoia (macOS 15) it shows unsigned apps as <em>"damaged and can't be opened"</em> — even though they aren't. The <code>xattr -cr</code> command strips that flag so macOS lets KEN run. You only do it once per install. A signed + notarized release is on the way; until then, you can also <a href="https://github.com/carlosarthurr1/Ken#build-from-source">build from source</a> — local builds aren't quarantined and start cleanly.
+        </p>
+      </section>
+
       <div class="links">
         <a href="https://github.com/carlosarthurr1/Ken">
           <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
@@ -283,6 +371,36 @@
             if (win && winBtn) winBtn.href = win.browser_download_url;
           })
           .catch(function () {});
+
+        // Copy-to-clipboard for the xattr command.
+        document.querySelectorAll(".copy[data-copy]").forEach(function (btn) {
+          btn.addEventListener("click", function () {
+            var target = document.querySelector(btn.getAttribute("data-copy"));
+            if (!target) return;
+            var text = target.textContent || "";
+            var done = function () {
+              var original = btn.textContent;
+              btn.textContent = "Copied";
+              setTimeout(function () {
+                btn.textContent = original;
+              }, 1400);
+            };
+            if (navigator.clipboard && navigator.clipboard.writeText) {
+              navigator.clipboard.writeText(text).then(done).catch(function () {});
+            } else {
+              var range = document.createRange();
+              range.selectNodeContents(target);
+              var sel = window.getSelection();
+              sel.removeAllRanges();
+              sel.addRange(range);
+              try {
+                document.execCommand("copy");
+                done();
+              } catch (e) {}
+              sel.removeAllRanges();
+            }
+          });
+        });
       })();
     </script>
   </body>

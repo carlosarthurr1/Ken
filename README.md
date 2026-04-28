@@ -12,11 +12,23 @@ A lightweight cross-platform AI search palette. Double-tap **Option/Alt** (or cl
 
 ### macOS
 
-Download the latest `.dmg` from [Releases](https://github.com/carlosarthurr1/Ken/releases) → drag KEN to Applications.
+1. Download the latest `.dmg` from [Releases](https://github.com/carlosarthurr1/Ken/releases).
+2. Drag **KEN.app** into your Applications folder.
+3. **Run this once in Terminal:**
+   ```bash
+   xattr -cr /Applications/KEN.app
+   ```
+4. Open KEN from Applications. macOS will ask for **Accessibility** permission so KEN can listen for the double-Option/Alt shortcut — grant it.
 
 The build is native Apple Silicon and runs under Rosetta 2 on Intel Macs.
 
-> KEN is unsigned right now. The first launch needs `System Settings → Privacy & Security → Open Anyway`. Global key listening also asks for **Accessibility** permission.
+#### Why the `xattr` step?
+
+KEN is currently distributed unsigned. macOS Gatekeeper adds a `com.apple.quarantine` flag to anything you download, and on macOS 15 (Sequoia) it shows the unsigned binary as **"damaged and can't be opened"** — even though it isn't damaged. The `xattr -cr` command strips that quarantine flag from the installed app so macOS lets it run. You only do it once per install.
+
+If you'd rather not run that command, the alternative is to **[build from source](#build-from-source)** — a local build doesn't get quarantined and starts cleanly.
+
+A signed + notarized release (no warnings, no `xattr`) is on the roadmap.
 
 ### Windows
 
