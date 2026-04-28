@@ -57,11 +57,27 @@
       }
 
       .icon {
-        width: 132px;
-        height: 132px;
-        margin: 0 auto 28px;
-        border-radius: 28px;
+        width: 112px;
+        height: 112px;
+        margin: 0 auto 24px;
+        border-radius: 24px;
         display: block;
+      }
+
+      .demo {
+        width: 100%;
+        max-width: 720px;
+        margin: 0 auto 36px;
+        border-radius: 14px;
+        display: block;
+        background: var(--hover-bg);
+        box-shadow: 0 1px 0 var(--border), 0 24px 48px -24px rgba(0, 0, 0, 0.18);
+      }
+
+      @media (prefers-color-scheme: dark) {
+        .demo {
+          box-shadow: 0 0 0 1px var(--border);
+        }
       }
 
       h1 {
@@ -184,6 +200,17 @@
         A lightweight palette that lives in your menu bar.<br />
         Double-tap Option/Alt — start typing.
       </p>
+
+      <video
+        class="demo"
+        src="demo.mp4"
+        autoplay
+        muted
+        loop
+        playsinline
+        preload="metadata"
+        aria-label="KEN demo: double-tap Option to summon the palette and ask anything"
+      ></video>
 
       <div class="downloads">
         <a class="btn" id="mac-btn" href="https://github.com/carlosarthurr1/Ken/releases/latest" data-os="mac">
