@@ -14,6 +14,8 @@ A lightweight cross-platform AI search palette. Double-tap **Option/Alt** (or cl
 
 Download the latest `.dmg` from [Releases](https://github.com/carlosarthurr1/Ken/releases) → drag KEN to Applications.
 
+The build is native Apple Silicon and runs under Rosetta 2 on Intel Macs.
+
 > KEN is unsigned right now. The first launch needs `System Settings → Privacy & Security → Open Anyway`. Global key listening also asks for **Accessibility** permission.
 
 ### Windows

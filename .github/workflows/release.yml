@@ -15,12 +15,13 @@ jobs:
       fail-fast: false
       matrix:
         include:
+          # Apple Silicon — covers all Macs since late 2020. Intel Macs run
+          # the arm64 build under Rosetta 2 with no perceivable hit for KEN.
+          # GitHub's macos-13 (Intel) runner pool is deprecated and queues
+          # for hours; not worth it.
           - os: macos-latest
             target: aarch64-apple-darwin
             label: macos-arm64
-          - os: macos-13
-            target: x86_64-apple-darwin
-            label: macos-x64
           - os: windows-latest
             target: x86_64-pc-windows-msvc
             label: windows-x64
@@ -60,7 +61,7 @@ jobs:
             See [CHANGELOG](https://github.com/carlosarthurr1/Ken/commits/${{ github.ref_name }}) for what changed.
 
             ### Install
-            - **macOS**: download the matching `.dmg` for your chip (Apple Silicon = arm64, Intel = x64), drag KEN to Applications.
+            - **macOS** (Apple Silicon native, runs on Intel via Rosetta 2): download the `.dmg`, drag KEN to Applications.
             - **Windows**: download the `.msi`, run it.
 
             First-launch on macOS may need `System Settings → Privacy & Security → Open Anyway` (KEN is unsigned).
