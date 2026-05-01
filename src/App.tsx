@@ -32,14 +32,19 @@ import {
   AiResult,
   ConversationTurn,
   DEFAULT_SETTINGS,
+  HotkeySpec,
   ImageAttachment,
   MODEL_OPTIONS,
+  ModifierKey,
   ProviderSettings,
   SavedImage,
   askProvider,
+  configuredProviderKinds,
+  describeHotkey,
   getModelOption,
   groupedModelOptions,
   normalizeSettings,
+  proofreadText,
 } from "./lib/providers";
 
 type Entry = {
@@ -54,7 +59,10 @@ const STORAGE_KEY = "ken.settings";
 const HISTORY_KEY = "ken.history";
 const HISTORY_MAX = 100;
 const HISTORY_PREVIEW_COUNT = 3;
-const MODEL_SELECT_OPTIONS = MODEL_OPTIONS.filter((option) => option.providerLabel !== "Ollama");
+// Ollama models come from the live `installedOllamaOptions` list instead of
+// the static catalog — exclude the seed Ollama entries here so we don't show
+// models the user hasn't actually pulled yet.
+const NON_OLLAMA_MODEL_OPTIONS = MODEL_OPTIONS.filter((option) => option.providerLabel !== "Ollama");
 const MAX_ATTACHMENTS = 4;
 const OLLAMA_DOWNLOAD_URL = "https://ollama.com/download";
 const OLLAMA_LIBRARY_URL = "https://ollama.com/library";
@@ -106,6 +114,13 @@ export default function App() {
   const [ollamaPullName, setOllamaPullName] = useState("gemma3:4b");
   const [pullProgress, setPullProgress] = useState<OllamaPullProgress | null>(null);
   const [pullingModel, setPullingModel] = useState<string | null>(null);
+  // null = unknown / not yet checked. Global hotkeys need macOS privacy
+  // permissions; we surface one-click fixes when either one is missing.
+  const [accessibilityGranted, setAccessibilityGranted] = useState<boolean | null>(null);
+  const [inputMonitoringGranted, setInputMonitoringGranted] = useState<boolean | null>(null);
+  const [capturingHotkey, setCapturingHotkey] = useState(false);
+  const [capturingProofread, setCapturingProofread] = useState(false);
+  const [proofreadStatus, setProofreadStatus] = useState<"idle" | "thinking" | "done" | "error">("idle");
 
   const latestEntry = entries[0];
   const threadEntries = useMemo(
@@ -146,13 +161,26 @@ export default function App() {
       group: "Installed Ollama",
     };
   }, [ollamaModels, settings.providerModel]);
+  const configuredKinds = useMemo(
+    () => configuredProviderKinds(settings, Boolean(codexAuth?.signedIn)),
+    [settings, codexAuth?.signedIn],
+  );
+  // Only show models whose provider is configured, but always keep the
+  // currently-selected model visible so the picker reflects reality.
+  const visibleBaseOptions = useMemo(
+    () =>
+      NON_OLLAMA_MODEL_OPTIONS.filter(
+        (option) => configuredKinds.has(option.provider) || option.id === settings.providerModel,
+      ),
+    [configuredKinds, settings.providerModel],
+  );
   const modelGroups = useMemo(
     () =>
       groupedModelOptions(
         currentOllamaOption ? [currentOllamaOption, ...installedOllamaOptions] : installedOllamaOptions,
-        MODEL_SELECT_OPTIONS,
+        visibleBaseOptions,
       ),
-    [currentOllamaOption, installedOllamaOptions],
+    [currentOllamaOption, installedOllamaOptions, visibleBaseOptions],
   );
   const providerIcon = activeModel.provider === "local" ? <Cpu size={14} /> : <SparkIcon />;
   const isExpanded = showSettings || showHistory || isLoading || Boolean(latestEntry) || Boolean(error);
@@ -160,6 +188,78 @@ export default function App() {
   useEffect(() => {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(settings));
   }, [settings]);
+
+  useEffect(() => {
+    if (!window.__TAURI_INTERNALS__) return;
+    invoke("set_hotkey", { spec: settings.hotkey }).catch(() => undefined);
+  }, [settings.hotkey]);
+
+  useEffect(() => {
+    if (!window.__TAURI_INTERNALS__) return;
+    invoke("set_proofread_hotkey", { spec: settings.proofreadHotkey }).catch(() => undefined);
+  }, [settings.proofreadHotkey]);
+
+  // Use a ref so the listener — registered once on mount — always reads the
+  // freshest provider settings, not a stale capture from when the hotkey was
+  // wired up.
+  const settingsRef = useRef(settings);
+  useEffect(() => {
+    settingsRef.current = settings;
+  }, [settings]);
+
+  useEffect(() => {
+    if (!window.__TAURI_INTERNALS__) return;
+    let busy = false;
+    const unlisten = listen<string>("proofread-requested", async (event) => {
+      if (busy) return;
+      const text = event.payload?.toString() ?? "";
+      if (!text.trim()) return;
+      busy = true;
+      setProofreadStatus("thinking");
+      // Visible indicator in the menu bar — pencil while thinking, cleared
+      // on done/error after a short delay so the user catches the change.
+      invoke("set_tray_status", { status: "✎" }).catch(() => undefined);
+      try {
+        const corrected = await proofreadText(text, settingsRef.current);
+        if (!corrected.trim()) {
+          setProofreadStatus("error");
+          setError("Proofread returned empty. Check your provider key.");
+          return;
+        }
+        await invoke("paste_text", { text: corrected });
+        setProofreadStatus("done");
+      } catch (caught) {
+        setProofreadStatus("error");
+        setError((caught as Error).message || String(caught));
+      } finally {
+        busy = false;
+        invoke("set_tray_status", { status: "" }).catch(() => undefined);
+        // Reset to idle after the user has had a chance to see "done".
+        window.setTimeout(() => setProofreadStatus("idle"), 1800);
+      }
+    });
+    return () => {
+      unlisten.then((dispose) => dispose()).catch(() => undefined);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!window.__TAURI_INTERNALS__) return;
+    const unlisten = listen<string>("proofread-error", (event) => {
+      const message = event.payload?.toString() || "Proofread failed.";
+      setProofreadStatus("error");
+      setError(message);
+      if (message.toLowerCase().includes("accessibility")) {
+        setShowSettings(true);
+      }
+      invoke<boolean>("accessibility_status")
+        .then((granted) => setAccessibilityGranted(Boolean(granted)))
+        .catch(() => undefined);
+    });
+    return () => {
+      unlisten.then((dispose) => dispose()).catch(() => undefined);
+    };
+  }, []);
 
   useEffect(() => {
     refreshOllamaModels();
@@ -198,6 +298,22 @@ export default function App() {
       .catch(() => {
         if (!cancelled) setCodexAuth({ signedIn: false, email: null, path: "" });
       });
+    invoke<boolean>("accessibility_status")
+      .then((granted) => {
+        if (!cancelled) setAccessibilityGranted(Boolean(granted));
+      })
+      .catch(() => {
+        // Command may not exist on non-macOS builds; treat as granted so we
+        // don't surface a fix-it card on platforms where it's irrelevant.
+        if (!cancelled) setAccessibilityGranted(true);
+      });
+    invoke<boolean>("input_monitoring_status")
+      .then((granted) => {
+        if (!cancelled) setInputMonitoringGranted(Boolean(granted));
+      })
+      .catch(() => {
+        if (!cancelled) setInputMonitoringGranted(true);
+      });
     return () => {
       cancelled = true;
     };
@@ -213,6 +329,16 @@ export default function App() {
 
     const unlisten = listen("palette-opened", () => {
       window.setTimeout(() => inputRef.current?.focus(), 40);
+      Promise.all([
+        invoke<boolean>("accessibility_status").catch(() => true),
+        invoke<boolean>("input_monitoring_status").catch(() => true),
+      ]).then(([accessibility, inputMonitoring]) => {
+        setAccessibilityGranted(Boolean(accessibility));
+        setInputMonitoringGranted(Boolean(inputMonitoring));
+        if (!accessibility || !inputMonitoring) {
+          setShowSettings(true);
+        }
+      });
     });
 
     return () => {
@@ -265,7 +391,7 @@ export default function App() {
       if (event.key !== "Alt" || altDown) return;
       altDown = true;
       const now = Date.now();
-      if (now - lastAlt < 430) {
+      if (now - lastAlt < 800) {
         inputRef.current?.focus();
       }
       lastAlt = now;
@@ -430,6 +556,77 @@ export default function App() {
     }
   }
 
+  useEffect(() => {
+    const target = capturingHotkey ? "open" : capturingProofread ? "proofread" : null;
+    if (!target) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      const code = event.code;
+      const isModifierOnly =
+        code === "AltLeft" ||
+        code === "AltRight" ||
+        code === "MetaLeft" ||
+        code === "MetaRight" ||
+        code === "ControlLeft" ||
+        code === "ControlRight" ||
+        code === "ShiftLeft" ||
+        code === "ShiftRight";
+      if (event.key === "Escape" && !event.altKey && !event.metaKey && !event.ctrlKey && !event.shiftKey) {
+        event.preventDefault();
+        setCapturingHotkey(false);
+        setCapturingProofread(false);
+        return;
+      }
+      if (isModifierOnly) return;
+      const modifiers: ModifierKey[] = [];
+      if (event.altKey) modifiers.push("alt");
+      if (event.metaKey) modifiers.push("cmd");
+      if (event.ctrlKey) modifiers.push("ctrl");
+      if (event.shiftKey) modifiers.push("shift");
+      if (modifiers.length === 0) return;
+      event.preventDefault();
+      const spec: HotkeySpec = { kind: "combo", modifiers, code };
+      if (target === "open") {
+        updateSettings({ hotkey: spec });
+        setCapturingHotkey(false);
+      } else {
+        updateSettings({ proofreadHotkey: spec });
+        setCapturingProofread(false);
+      }
+    };
+    window.addEventListener("keydown", onKeyDown, true);
+    return () => window.removeEventListener("keydown", onKeyDown, true);
+  }, [capturingHotkey, capturingProofread]);
+
+  async function openAccessibilitySettings() {
+    if (!window.__TAURI_INTERNALS__) return;
+    try {
+      await invoke("open_accessibility_settings");
+      // Re-check shortly after — if the user grants permission while the
+      // window stays open, the card flips to the granted state.
+      window.setTimeout(() => {
+        invoke<boolean>("accessibility_status")
+          .then((granted) => setAccessibilityGranted(Boolean(granted)))
+          .catch(() => undefined);
+      }, 1500);
+    } catch (caught) {
+      setError((caught as Error).message || String(caught));
+    }
+  }
+
+  async function openInputMonitoringSettings() {
+    if (!window.__TAURI_INTERNALS__) return;
+    try {
+      await invoke("open_input_monitoring_settings");
+      window.setTimeout(() => {
+        invoke<boolean>("input_monitoring_status")
+          .then((granted) => setInputMonitoringGranted(Boolean(granted)))
+          .catch(() => undefined);
+      }, 1500);
+    } catch (caught) {
+      setError((caught as Error).message || String(caught));
+    }
+  }
+
   function openHistoryEntry(entry: Entry) {
     setEntries((current) => {
       const without = current.filter((e) => e.id !== entry.id);
@@ -445,6 +642,10 @@ export default function App() {
   function clearHistory() {
     setEntries([]);
     setActiveThreadId(null);
+  }
+
+  function dismissHistoryEntry(id: string) {
+    setEntries((current) => current.filter((entry) => entry.id !== id));
   }
 
   async function copyResult(entry: Entry) {
@@ -807,6 +1008,193 @@ export default function App() {
           <div className="expanded-content">
             {showSettings && (
               <section className="settings-panel" aria-label="Provider settings">
+                {accessibilityGranted === false && (
+                  <div className="setting-card setting-card--wide">
+                    <KeyRound size={16} aria-hidden="true" />
+                    <label>
+                      <span>Accessibility permission</span>
+                      <div className="setting-row">
+                        <span className="setting-value muted">
+                          The hotkey ({describeHotkey(settings.hotkey)}) needs Accessibility access.
+                          macOS won't fire it until you enable it.
+                        </span>
+                        <button
+                          type="button"
+                          className="chip chip--primary"
+                          onClick={openAccessibilitySettings}
+                        >
+                          <ExternalLink size={14} aria-hidden="true" />
+                          <span>Open settings</span>
+                        </button>
+                      </div>
+                    </label>
+                  </div>
+                )}
+
+                {inputMonitoringGranted === false && (
+                  <div className="setting-card setting-card--wide">
+                    <KeyRound size={16} aria-hidden="true" />
+                    <label>
+                      <span>Input Monitoring permission</span>
+                      <div className="setting-row">
+                        <span className="setting-value muted">
+                          The hotkey ({describeHotkey(settings.hotkey)}) needs Input Monitoring access
+                          so macOS will deliver global key events.
+                        </span>
+                        <button
+                          type="button"
+                          className="chip chip--primary"
+                          onClick={openInputMonitoringSettings}
+                        >
+                          <ExternalLink size={14} aria-hidden="true" />
+                          <span>Open settings</span>
+                        </button>
+                      </div>
+                    </label>
+                  </div>
+                )}
+
+                <div className="setting-card setting-card--wide">
+                  <Cpu size={16} aria-hidden="true" />
+                  <label>
+                    <span>Hotkey</span>
+                    <div className="setting-grid">
+                      <select
+                        value={settings.hotkey.kind}
+                        onChange={(event) => {
+                          const kind = event.target.value as HotkeySpec["kind"];
+                          if (kind === "double-tap") {
+                            updateSettings({ hotkey: { kind: "double-tap", key: "alt" } });
+                          } else {
+                            updateSettings({
+                              hotkey: { kind: "combo", modifiers: ["cmd"], code: "Space" },
+                            });
+                          }
+                          setCapturingHotkey(false);
+                        }}
+                        aria-label="Hotkey type"
+                      >
+                        <option value="double-tap">Double-tap modifier</option>
+                        <option value="combo">Key combination</option>
+                      </select>
+                      {settings.hotkey.kind === "double-tap" ? (
+                        <select
+                          value={settings.hotkey.key}
+                          onChange={(event) =>
+                            updateSettings({
+                              hotkey: {
+                                kind: "double-tap",
+                                key: event.target.value as ModifierKey,
+                              },
+                            })
+                          }
+                          aria-label="Modifier key"
+                        >
+                          <option value="alt">⌥ Option</option>
+                          <option value="cmd">⌘ Command</option>
+                          <option value="ctrl">⌃ Control</option>
+                          <option value="shift">⇧ Shift</option>
+                        </select>
+                      ) : (
+                        <button
+                          type="button"
+                          className={`chip ${capturingHotkey ? "is-confirmed" : ""}`}
+                          onClick={() => setCapturingHotkey((v) => !v)}
+                          aria-label="Record key combination"
+                        >
+                          <span>
+                            {capturingHotkey
+                              ? "Press shortcut… (Esc to cancel)"
+                              : describeHotkey(settings.hotkey)}
+                          </span>
+                        </button>
+                      )}
+                    </div>
+                    <span className="setting-note">
+                      {settings.hotkey.kind === "double-tap"
+                        ? `Tap ${describeHotkey(settings.hotkey).replace("Double ", "")} twice within ~800ms to summon KEN.`
+                        : "Hold modifiers and tap a key. The combo must include at least one modifier."}
+                    </span>
+                  </label>
+                </div>
+
+                <div className="setting-card setting-card--wide">
+                  <Sparkles size={16} aria-hidden="true" />
+                  <label>
+                    <span>Proofread selection</span>
+                    <div className="setting-grid">
+                      <select
+                        value={
+                          settings.proofreadHotkey === null
+                            ? "off"
+                            : settings.proofreadHotkey.kind
+                        }
+                        onChange={(event) => {
+                          const value = event.target.value;
+                          if (value === "off") {
+                            updateSettings({ proofreadHotkey: null });
+                          } else if (value === "double-tap") {
+                            updateSettings({
+                              proofreadHotkey: { kind: "double-tap", key: "shift" },
+                            });
+                          } else {
+                            updateSettings({
+                              proofreadHotkey: {
+                                kind: "combo",
+                                modifiers: ["cmd", "shift"],
+                                code: "KeyP",
+                              },
+                            });
+                          }
+                          setCapturingProofread(false);
+                        }}
+                        aria-label="Proofread hotkey type"
+                      >
+                        <option value="off">Off</option>
+                        <option value="double-tap">Double-tap modifier</option>
+                        <option value="combo">Key combination</option>
+                      </select>
+                      {settings.proofreadHotkey?.kind === "double-tap" && (
+                        <select
+                          value={settings.proofreadHotkey.key}
+                          onChange={(event) =>
+                            updateSettings({
+                              proofreadHotkey: {
+                                kind: "double-tap",
+                                key: event.target.value as ModifierKey,
+                              },
+                            })
+                          }
+                          aria-label="Proofread modifier key"
+                        >
+                          <option value="alt">⌥ Option</option>
+                          <option value="cmd">⌘ Command</option>
+                          <option value="ctrl">⌃ Control</option>
+                          <option value="shift">⇧ Shift</option>
+                        </select>
+                      )}
+                      {settings.proofreadHotkey?.kind === "combo" && (
+                        <button
+                          type="button"
+                          className={`chip ${capturingProofread ? "is-confirmed" : ""}`}
+                          onClick={() => setCapturingProofread((v) => !v)}
+                          aria-label="Record proofread combination"
+                        >
+                          <span>
+                            {capturingProofread
+                              ? "Press shortcut… (Esc to cancel)"
+                              : describeHotkey(settings.proofreadHotkey)}
+                          </span>
+                        </button>
+                      )}
+                    </div>
+                    <span className="setting-note">
+                      Highlights any text, fires the hotkey, KEN replaces it with a proofread
+                      version using your selected model. No em-dashes.
+                    </span>
+                  </label>
+                </div>
+
                 <div className="setting-card setting-card--wide">
                   <Sparkles size={16} aria-hidden="true" />
                   <label>
@@ -843,6 +1231,84 @@ export default function App() {
                       value={settings.openaiApiKey}
                       onChange={(event) => updateSettings({ openaiApiKey: event.target.value })}
                       placeholder="sk-..."
+                      type="password"
+                    />
+                  </label>
+                </div>
+
+                <div className="setting-card">
+                  <KeyRound size={16} aria-hidden="true" />
+                  <label>
+                    <span>Z.ai (GLM / Coder)</span>
+                    <input
+                      value={settings.zaiApiKey}
+                      onChange={(event) => updateSettings({ zaiApiKey: event.target.value })}
+                      placeholder="z.ai API key"
+                      type="password"
+                    />
+                  </label>
+                </div>
+
+                <div className="setting-card">
+                  <KeyRound size={16} aria-hidden="true" />
+                  <label>
+                    <span>OpenRouter</span>
+                    <input
+                      value={settings.openrouterApiKey}
+                      onChange={(event) => updateSettings({ openrouterApiKey: event.target.value })}
+                      placeholder="sk-or-..."
+                      type="password"
+                    />
+                  </label>
+                </div>
+
+                <div className="setting-card">
+                  <KeyRound size={16} aria-hidden="true" />
+                  <label>
+                    <span>DeepSeek</span>
+                    <input
+                      value={settings.deepseekApiKey}
+                      onChange={(event) => updateSettings({ deepseekApiKey: event.target.value })}
+                      placeholder="DeepSeek API key"
+                      type="password"
+                    />
+                  </label>
+                </div>
+
+                <div className="setting-card">
+                  <KeyRound size={16} aria-hidden="true" />
+                  <label>
+                    <span>Google Gemini</span>
+                    <input
+                      value={settings.googleApiKey}
+                      onChange={(event) => updateSettings({ googleApiKey: event.target.value })}
+                      placeholder="Gemini API key"
+                      type="password"
+                    />
+                  </label>
+                </div>
+
+                <div className="setting-card">
+                  <KeyRound size={16} aria-hidden="true" />
+                  <label>
+                    <span>Groq</span>
+                    <input
+                      value={settings.groqApiKey}
+                      onChange={(event) => updateSettings({ groqApiKey: event.target.value })}
+                      placeholder="gsk_..."
+                      type="password"
+                    />
+                  </label>
+                </div>
+
+                <div className="setting-card">
+                  <KeyRound size={16} aria-hidden="true" />
+                  <label>
+                    <span>Mistral</span>
+                    <input
+                      value={settings.mistralApiKey}
+                      onChange={(event) => updateSettings({ mistralApiKey: event.target.value })}
+                      placeholder="Mistral API key"
                       type="password"
                     />
                   </label>
@@ -1034,12 +1500,25 @@ export default function App() {
                 ) : (
                   <ul className="history-list">
                     {entries.map((entry) => (
-                      <li key={entry.id}>
-                        <button type="button" onClick={() => openHistoryEntry(entry)}>
+                      <li key={entry.id} className="history-list-item">
+                        <button
+                          type="button"
+                          className="history-list-main"
+                          onClick={() => openHistoryEntry(entry)}
+                        >
                           <span className="history-query">{entry.query}</span>
                           <span className="history-meta">
                             {entry.result.providerLabel} · {entry.createdAt}
                           </span>
+                        </button>
+                        <button
+                          type="button"
+                          className="history-dismiss"
+                          onClick={() => dismissHistoryEntry(entry.id)}
+                          aria-label={`Dismiss ${entry.query}`}
+                          title="Dismiss"
+                        >
+                          <X size={14} aria-hidden="true" />
                         </button>
                       </li>
                     ))}
@@ -1176,15 +1655,26 @@ export default function App() {
                 {entries.length > 1 && !isLoading && (
                   <div className="history">
                     {inlineHistoryEntries.map((entry) => (
-                      <button
-                        type="button"
-                        key={entry.id}
-                        onClick={() => setQuery(entry.query)}
-                        title={entry.query}
-                      >
-                        <span>{entry.query}</span>
-                        <small>{entry.createdAt}</small>
-                      </button>
+                      <div className="history-item" key={entry.id}>
+                        <button
+                          type="button"
+                          className="history-reuse"
+                          onClick={() => setQuery(entry.query)}
+                          title={entry.query}
+                        >
+                          <span>{entry.query}</span>
+                          <small>{entry.createdAt}</small>
+                        </button>
+                        <button
+                          type="button"
+                          className="history-dismiss"
+                          onClick={() => dismissHistoryEntry(entry.id)}
+                          aria-label={`Dismiss ${entry.query}`}
+                          title="Dismiss"
+                        >
+                          <X size={14} aria-hidden="true" />
+                        </button>
+                      </div>
                     ))}
                     {hasMoreInlineHistory && (
                       <button

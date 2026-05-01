@@ -634,7 +634,14 @@ button {
   list-style: none;
 }
 
-.history-list button {
+.history-list-item {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 34px;
+  gap: 6px;
+  align-items: stretch;
+}
+
+.history-list button.history-list-main {
   display: flex;
   flex-direction: column;
   align-items: flex-start;
@@ -650,12 +657,31 @@ button {
   transition: background-color 140ms ease, transform 140ms ease;
 }
 
-.history-list button:hover {
+.history-list button.history-list-main:hover {
   background: rgba(255, 255, 255, 0.13);
 }
 
-.history-list button:active {
+.history-list button.history-list-main:active {
   transform: translateY(1px);
+}
+
+.history-list button.history-dismiss,
+.history button.history-dismiss {
+  display: inline-grid;
+  place-items: center;
+  width: 34px;
+  height: 100%;
+  min-height: 34px;
+  padding: 0;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.06);
+  color: rgba(245, 240, 231, 0.56);
+}
+
+.history-list button.history-dismiss:hover,
+.history button.history-dismiss:hover {
+  background: rgba(255, 112, 90, 0.18);
+  color: rgba(255, 218, 210, 0.92);
 }
 
 .history-query {
@@ -1063,7 +1089,14 @@ button {
   margin-top: 10px;
 }
 
-.history button {
+.history-item {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 34px;
+  gap: 6px;
+  align-items: center;
+}
+
+.history button.history-reuse {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
   gap: 12px;
@@ -1080,11 +1113,11 @@ button {
   transition-timing-function: cubic-bezier(0.2, 0, 0, 1);
 }
 
-.history button:active {
+.history button.history-reuse:active {
   scale: 0.96;
 }
 
-.history button:hover {
+.history button.history-reuse:hover {
   background: rgba(255, 255, 255, 0.12);
 }
 

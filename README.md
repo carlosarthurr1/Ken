@@ -1,9 +1,11 @@
 # KEN
 
-A lightweight cross-platform AI search palette. Double-tap **Option/Alt** (or click the menu-bar icon) and KEN drops in from the top of your screen ready for a question. Plug in ChatGPT (Codex login), an OpenAI API key, or run fully local with Ollama / GGUF.
+A lightweight cross-platform AI search palette. Double-tap **Option/Alt** by default (or choose your own shortcut), and KEN drops in from the top of your screen ready for a question. Plug in ChatGPT, OpenAI, Z.ai, OpenRouter, DeepSeek, Gemini, Groq, Mistral, Ollama, or local GGUF models.
 
 - **Native shell** — Tauri 2, tray-resident, ~10 MB binary.
-- **Bring your own model** — ChatGPT subscription via Codex OAuth, OpenAI API (BYOK), Ollama (local), or any GGUF KEN can find on disk.
+- **Bring your own model** — ChatGPT subscription via Codex OAuth, OpenAI API (BYOK), OpenAI-compatible providers, Ollama (local), or any GGUF KEN can find on disk.
+- **Configurable global shortcuts** — keep double-Option/Alt, pick another modifier, or record a normal key combo.
+- **Proofread selected text** — highlight text anywhere, trigger your proofread shortcut, and KEN replaces the selection with a cleaned-up version from your selected model.
 - **Vision + image generation** — drag-and-drop images into the bar; generate via `gpt-image-2` or describe via Gemma/Qwen vision.
 - **Web search** — optional Tavily / Brave / OpenAI web search for grounded answers.
 - **No telemetry, no accounts** — your keys live in `localStorage`, your Codex tokens stay in `~/.codex/auth.json`.
@@ -18,7 +20,7 @@ A lightweight cross-platform AI search palette. Double-tap **Option/Alt** (or cl
    ```bash
    xattr -cr /Applications/KEN.app
    ```
-4. Open KEN from Applications. macOS will ask for **Accessibility** permission so KEN can listen for the double-Option/Alt shortcut — grant it.
+4. Open KEN from Applications. macOS may ask for **Input Monitoring** so KEN can hear the global shortcut, and **Accessibility** so proofread can copy/paste selected text — grant both if you want those features.
 
 The build is native Apple Silicon and runs under Rosetta 2 on Intel Macs.
 
@@ -61,7 +63,8 @@ Cross-OS builds happen on CI — see `.github/workflows/release.yml`. Pushing a 
 
 | Action | macOS | Windows / Linux |
 | --- | --- | --- |
-| Show palette | Double-tap `⌥` Option, or click tray icon | Double-tap `Alt`, or click tray icon |
+| Show palette | Double-tap `⌥` Option by default, configurable in Settings, or click tray icon | Double-tap `Alt` by default, configurable in Settings, or click tray icon |
+| Proofread selection | Enable a proofread shortcut in Settings, then select text and trigger it | Same |
 | Focus input | `⌘K` | `Ctrl+K` |
 | Hide / back | `Esc` | `Esc` |
 | Submit | `Enter` | `Enter` |
@@ -69,12 +72,13 @@ Cross-OS builds happen on CI — see `.github/workflows/release.yml`. Pushing a 
 
 ### Providers
 
-KEN ships with four provider adapters. Choose one in **Settings**:
+Choose a model in the palette, then add any required key in **Settings**:
 
 1. **ChatGPT (Codex subscription)** — uses the OAuth tokens written by the official [Codex CLI](https://github.com/openai/codex). Run `codex login` once, then KEN reads `~/.codex/auth.json` (or `$CODEX_HOME/auth.json`).
 2. **OpenAI API (BYOK)** — paste an `sk-…` key. Hits the public Responses API. Web search uses `web_search_preview`.
-3. **Ollama** — KEN talks to `http://localhost:11434` for models like `gemma3:4b` or `qwen2.5vl:3b`. Vision works for vision-capable models.
-4. **Local GGUF** — drops in via [llama.cpp](https://github.com/ggml-org/llama.cpp). KEN auto-discovers GGUF files in its own data dir, plus shared dirs from sibling apps (Oat / Sumi) when present.
+3. **OpenAI-compatible APIs** — Z.ai / GLM, Z.ai Coder, OpenRouter, DeepSeek, Google Gemini, Groq, and Mistral each have their own key field.
+4. **Ollama** — KEN talks to `http://localhost:11434` for models like `gemma3:4b` or `qwen2.5vl:3b`. Vision works for vision-capable models.
+5. **Local GGUF** — drops in via [llama.cpp](https://github.com/ggml-org/llama.cpp). KEN auto-discovers GGUF files in its own data dir, plus shared dirs from sibling apps (Oat / Sumi) when present.
 
 ### Generated images
 

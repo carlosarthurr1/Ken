@@ -47,7 +47,9 @@
       "icons/icon.ico"
     ],
     "macOS": {
-      "minimumSystemVersion": "10.15"
+      "minimumSystemVersion": "10.15",
+      "hardenedRuntime": false,
+      "signingIdentity": "Apple Development: Carlos Domingues (D7ZJW65866)"
     }
   }
 }
