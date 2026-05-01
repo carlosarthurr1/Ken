@@ -1,0 +1,6 @@
+*
+!Dockerfile.landing
+!deploy/
+!deploy/nginx-landing.conf
+!docs/
+!docs/**

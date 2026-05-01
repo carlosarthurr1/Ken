@@ -59,6 +59,22 @@ Bundles land in `src-tauri/target/release/bundle/`:
 
 Cross-OS builds happen on CI — see `.github/workflows/release.yml`. Pushing a tag like `v0.1.0` builds and uploads installers to a draft GitHub Release.
 
+## Deploy the landing page
+
+The static landing page lives in `docs/` and can be deployed separately from the Tauri app with `Dockerfile.landing`.
+
+Coolify settings:
+
+- Resource type: Application from this GitHub repository.
+- Branch: `main`.
+- Build Pack: `Dockerfile`.
+- Base Directory: `/`.
+- Dockerfile Location: `/Dockerfile.landing`.
+- Port Exposes / Network port: `80`.
+- Domain / FQDN: `https://ken.carlosarthur.com`.
+
+Point the DNS `A` record for `ken.carlosarthur.com` to the Coolify server IP, then deploy the resource. Coolify will route the domain to the nginx container and issue HTTPS when the FQDN starts with `https://`.
+
 ## Using it
 
 | Action | macOS | Windows / Linux |
