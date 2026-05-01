@@ -67,4 +67,4 @@ jobs:
             First-launch on macOS may need `System Settings → Privacy & Security → Open Anyway` (KEN is unsigned).
           releaseDraft: true
           prerelease: false
-          args: --target ${{ matrix.target }}
+          args: --target ${{ matrix.target }} --no-sign
